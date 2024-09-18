@@ -43,8 +43,21 @@ rename time year
 // drop unwanted columns
 drop indicator indicator_code country_code
 // save
-cd "$data/tidy_data"
+cd "$tidy"
 save nominal_gdp_growth, replace
+
+// import country list to create a is_country flag
+cd "$raw"
+clear
+import delimited "country_list.csv", varnames(1)
+// change variable name for merging
+rename table_names country
+// flag non-country entities; all the non-country entities have blank region
+gen is_country = (region != "")
+drop country_code region income_group
+// save for merging
+cd "$tidy"
+save country_flag, replace
 
 // merge three table into one table
 use "external_debt.dta", clear
@@ -52,8 +65,16 @@ merge 1:1 country year using "current_account_balance.dta"
 drop _merge
 merge 1:1 country year using "nominal_gdp_growth"
 drop _merge
-
 // drop rows if all three data are missing, which makes the obs meaningless
 drop if missing(external_debt) & missing(current_account_balance) & missing(nominal_gdp_growth)
-save workfile, replace
+// save workfile
 
+// merge country flag to remove non-country entities
+merge m:1 country using "country_flag.dta"
+drop _merge
+drop if (is_country == 0)
+drop is_country
+save workfile, replace
+// merging brings back some previously deleted rows
+drop if missing(external_debt) & missing(current_account_balance) & missing(nominal_gdp_growth)
+save workfile, replace
